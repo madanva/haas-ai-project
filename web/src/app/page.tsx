@@ -22,6 +22,7 @@ export default function Home() {
   const [visibility, setVisibility] = useState<Visibility>("pit_only");
   const [sortKey, setSortKey] = useState<SortKey>("areas");
   const [hideNotOffered, setHideNotOffered] = useState(true);
+  const [selectedQuarters, setSelectedQuarters] = useState<Set<string>>(new Set());
   const [activeCourse, setActiveCourse] = useState<ClassifiedCourse | null>(null);
 
   useEffect(() => {
@@ -73,6 +74,10 @@ export default function Home() {
     const needle = search.trim().toLowerCase();
     return payload.results.filter((r) => {
       if (hideNotOffered && !r.is_offered_this_year) return false;
+      if (selectedQuarters.size > 0) {
+        const hit = r.offered_terms.some((q) => selectedQuarters.has(q));
+        if (!hit) return false;
+      }
       if (visibility === "pit_only" && !r.verdict.is_pit) return false;
       if (selectedAreas.size > 0) {
         const hit = r.verdict.impact_areas.some((a) => selectedAreas.has(a));
@@ -99,7 +104,7 @@ export default function Home() {
       }
       return true;
     });
-  }, [payload, search, selectedAreas, selectedCategories, selectedDepts, visibility, hideNotOffered]);
+  }, [payload, search, selectedAreas, selectedCategories, selectedDepts, selectedQuarters, visibility, hideNotOffered]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -167,6 +172,43 @@ export default function Home() {
                 </span>
               </span>
             </label>
+          </FilterSection>
+
+          <FilterSection title={`Quarter (${selectedQuarters.size})`}>
+            <div className="space-y-1">
+              {(["Autumn", "Winter", "Spring", "Summer"] as const).map((q) => {
+                const count = offeredFilteredAll.filter((r) =>
+                  r.offered_terms.includes(q),
+                ).length;
+                const pitInQ = offeredFilteredAll.filter(
+                  (r) => r.offered_terms.includes(q) && r.verdict.is_pit,
+                ).length;
+                return (
+                  <label
+                    key={q}
+                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 -mx-1 px-1 py-0.5 rounded"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedQuarters.has(q)}
+                      onChange={() => toggleSet(selectedQuarters, q, setSelectedQuarters)}
+                    />
+                    <span className="flex-1">{q}</span>
+                    <span className="text-xs text-zinc-500 tabular-nums">
+                      {visibility === "pit_only" ? pitInQ : count}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            {selectedQuarters.size > 0 && (
+              <button
+                className="text-xs text-blue-600 hover:underline mt-2"
+                onClick={() => setSelectedQuarters(new Set())}
+              >
+                Clear quarters
+              </button>
+            )}
           </FilterSection>
 
           <FilterSection title={`Impact Areas (${selectedAreas.size})`}>
