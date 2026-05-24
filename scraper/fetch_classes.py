@@ -55,6 +55,11 @@ class Course:
     academic_org_descr: str
     academic_career: str
     cross_listed_codes: list[str]  # extracted from title, e.g. "CS 181"
+    # Offering signal: which quarters this course is actually scheduled in.
+    # Empty list means the course is in the active catalog but is not taught
+    # this academic year (explorecourses' UI shows "Last offered:" for these).
+    offered_terms: list[str]  # subset of ["Autumn", "Winter", "Spring", "Summer"]
+    is_offered_this_year: bool
 
 
 _session = requests.Session()
@@ -155,6 +160,23 @@ def parse_courses(xml_bytes: bytes) -> list[Course]:
         subject = _text(c.find("subject"))
         code = _text(c.find("code"))
 
+        # Offering signal: parse scheduled sections. Term strings come back
+        # like "2025-2026 Autumn" — pull just the quarter name. Empty list
+        # means catalog-active but not taught this year (explorecourses' UI
+        # shows "Last offered: ..." for these).
+        seen_quarters: set[str] = set()
+        sections_el = c.find("sections")
+        if sections_el is not None:
+            for s in sections_el.iter("section"):
+                term_text = _text(s.find("term"))
+                parts = term_text.rsplit(" ", 1)
+                quarter = parts[-1] if parts else ""
+                if quarter in {"Autumn", "Winter", "Spring", "Summer"}:
+                    seen_quarters.add(quarter)
+        offered_quarters = [
+            q for q in ("Autumn", "Winter", "Spring", "Summer") if q in seen_quarters
+        ]
+
         out.append(Course(
             course_id=course_id,
             subject=subject,
@@ -172,6 +194,8 @@ def parse_courses(xml_bytes: bytes) -> list[Course]:
             academic_org_descr="",  # not in XML; will be backfilled if needed
             academic_career=academic_career,
             cross_listed_codes=cross_listed,
+            offered_terms=offered_quarters,
+            is_offered_this_year=bool(offered_quarters),
         ))
     return out
 

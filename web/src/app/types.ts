@@ -34,6 +34,11 @@ export interface Course {
   academic_org_descr: string;
   academic_career: string;
   cross_listed_codes: string[];
+  // Which quarters this course is actually scheduled in. Empty array means
+  // the course is in the active catalog but not being taught this year
+  // (explorecourses' UI labels these "Last offered: ...").
+  offered_terms: string[];
+  is_offered_this_year: boolean;
 }
 
 export interface ClassifiedCourse extends Course {

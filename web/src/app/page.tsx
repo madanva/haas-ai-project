@@ -21,6 +21,7 @@ export default function Home() {
   const [deptFilter, setDeptFilter] = useState("");
   const [visibility, setVisibility] = useState<Visibility>("pit_only");
   const [sortKey, setSortKey] = useState<SortKey>("areas");
+  const [hideNotOffered, setHideNotOffered] = useState(true);
   const [activeCourse, setActiveCourse] = useState<ClassifiedCourse | null>(null);
 
   useEffect(() => {
@@ -39,10 +40,21 @@ export default function Home() {
       });
   }, []);
 
-  const deptStats = useMemo(() => {
+  // Total counts that reflect the offered-this-year filter so the sidebar
+  // displays consistent numbers with the visible course list.
+  const offeredFilteredAll = useMemo(() => {
     if (!payload) return [];
+    return hideNotOffered
+      ? payload.results.filter((r) => r.is_offered_this_year)
+      : payload.results;
+  }, [payload, hideNotOffered]);
+
+  const totalCount = offeredFilteredAll.length;
+  const pitCount = offeredFilteredAll.filter((r) => r.verdict.is_pit).length;
+
+  const deptStats = useMemo(() => {
     const counts = new Map<string, { total: number; pit: number; label: string }>();
-    for (const r of payload.results) {
+    for (const r of offeredFilteredAll) {
       const key = r.subject;
       const label = r.academic_org || r.subject;
       const cur = counts.get(key) || { total: 0, pit: 0, label };
@@ -54,12 +66,13 @@ export default function Home() {
       .map(([code, v]) => ({ code, ...v }))
       .filter((d) => d.pit > 0 || visibility === "all")
       .sort((a, b) => b.pit - a.pit || a.code.localeCompare(b.code));
-  }, [payload, visibility]);
+  }, [offeredFilteredAll, visibility]);
 
   const filtered = useMemo(() => {
     if (!payload) return [];
     const needle = search.trim().toLowerCase();
     return payload.results.filter((r) => {
+      if (hideNotOffered && !r.is_offered_this_year) return false;
       if (visibility === "pit_only" && !r.verdict.is_pit) return false;
       if (selectedAreas.size > 0) {
         const hit = r.verdict.impact_areas.some((a) => selectedAreas.has(a));
@@ -86,7 +99,7 @@ export default function Home() {
       }
       return true;
     });
-  }, [payload, search, selectedAreas, selectedCategories, selectedDepts, visibility]);
+  }, [payload, search, selectedAreas, selectedCategories, selectedDepts, visibility, hideNotOffered]);
 
   const sorted = useMemo(() => {
     const arr = [...filtered];
@@ -135,12 +148,25 @@ export default function Home() {
           <FilterSection title="Show">
             <RadioGroup
               options={[
-                { value: "pit_only", label: `PIT only (${payload.pit_count.toLocaleString()})` },
-                { value: "all", label: `All courses (${payload.count.toLocaleString()})` },
+                { value: "pit_only", label: `PIT only (${pitCount.toLocaleString()})` },
+                { value: "all", label: `All courses (${totalCount.toLocaleString()})` },
               ]}
               value={visibility}
               onChange={(v) => setVisibility(v as Visibility)}
             />
+            <label className="flex items-center gap-2 text-sm cursor-pointer mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-800">
+              <input
+                type="checkbox"
+                checked={hideNotOffered}
+                onChange={(e) => setHideNotOffered(e.target.checked)}
+              />
+              <span>
+                Only offered 2025–26
+                <span className="text-xs text-zinc-500 ml-1">
+                  (hides {(payload.count - payload.results.filter((r) => r.is_offered_this_year).length).toLocaleString()})
+                </span>
+              </span>
+            </label>
           </FilterSection>
 
           <FilterSection title={`Impact Areas (${selectedAreas.size})`}>
@@ -244,10 +270,11 @@ export default function Home() {
 
           <div className="text-sm text-zinc-500 mb-3">
             {sorted.length.toLocaleString()} of{" "}
-            {visibility === "pit_only"
-              ? payload.pit_count.toLocaleString()
-              : payload.count.toLocaleString()}{" "}
+            {visibility === "pit_only" ? pitCount.toLocaleString() : totalCount.toLocaleString()}{" "}
             courses
+            {hideNotOffered && (
+              <span className="text-zinc-400"> (offered 2025–26)</span>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -305,6 +332,7 @@ function Footer({ payload }: { payload: ClassifiedPayload }) {
     <footer className="border-t border-zinc-200 dark:border-zinc-800 mt-12 py-4">
       <div className="max-w-[1600px] mx-auto px-4 lg:px-6 text-xs text-zinc-500">
         {payload.pit_count.toLocaleString()} of {payload.count.toLocaleString()} courses identified as PIT •
+        {" "}{payload.results.filter((r) => r.verdict.is_pit && r.is_offered_this_year).length.toLocaleString()} offered this year •
         classified {new Date(payload.classified_at).toLocaleDateString()} • model {payload.model} •
         source: explorecourses.stanford.edu
       </div>
@@ -388,11 +416,20 @@ function CourseCard({
         <span className="text-sm font-mono text-zinc-500 dark:text-zinc-400">
           {course.full_code}
         </span>
-        <span className="text-xs text-zinc-500 whitespace-nowrap">
-          {course.units_min === course.units_max
-            ? `${course.units_min ?? "?"} units`
-            : `${course.units_min ?? "?"}–${course.units_max ?? "?"} units`}
-        </span>
+        <div className="text-xs text-zinc-500 whitespace-nowrap flex items-center gap-2">
+          {course.is_offered_this_year ? (
+            <span className="text-emerald-700 dark:text-emerald-400">
+              {course.offered_terms.join(" · ")}
+            </span>
+          ) : (
+            <span className="text-amber-700 dark:text-amber-400">Not offered 2025–26</span>
+          )}
+          <span>
+            {course.units_min === course.units_max
+              ? `${course.units_min ?? "?"} units`
+              : `${course.units_min ?? "?"}–${course.units_max ?? "?"} units`}
+          </span>
+        </div>
       </div>
       <h2 className="text-base font-medium text-zinc-900 dark:text-zinc-50 leading-snug mb-2">
         {course.title}
@@ -461,6 +498,17 @@ function CourseModal({
                   ? `${course.units_min} units`
                   : `${course.units_min}–${course.units_max} units`}{" "}
                 • {course.grading}
+              </div>
+              <div className="text-xs mt-1">
+                {course.is_offered_this_year ? (
+                  <span className="text-emerald-700 dark:text-emerald-400">
+                    Offered 2025–26: {course.offered_terms.join(", ")}
+                  </span>
+                ) : (
+                  <span className="text-amber-700 dark:text-amber-400">
+                    Not offered in 2025–26
+                  </span>
+                )}
               </div>
               {course.cross_listed_codes.length > 0 && (
                 <div className="text-xs text-zinc-500 mt-1">
