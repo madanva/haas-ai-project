@@ -9,6 +9,7 @@ import {
   areaChipClass,
   impactAreaTheme,
   primaryTheme,
+  type ImpactTheme,
 } from "./taxonomy";
 
 type SortKey = "code" | "title" | "department" | "confidence" | "areas";
@@ -31,6 +32,19 @@ export default function Home() {
   const [sortKey, setSortKey] = useState<SortKey>("areas");
   const [hideNotOffered, setHideNotOffered] = useState(true);
   const [activeCourse, setActiveCourse] = useState<ClassifiedCourse | null>(null);
+  // Mobile-only: the sidebar collapses into a bottom-sheet drawer triggered
+  // by a sticky "Filters" button. On lg+ it's an always-visible left rail.
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Lock body scroll while the mobile filter drawer is open.
+  useEffect(() => {
+    if (filtersOpen) {
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = "";
+      };
+    }
+  }, [filtersOpen]);
 
   useEffect(() => {
     fetch(DATA_URL)
@@ -189,9 +203,75 @@ export default function Home() {
         deptCount={deptCount}
       />
 
-      <div className="flex flex-1 flex-col lg:flex-row max-w-[1600px] w-full mx-auto px-4 lg:px-8 gap-8 py-8">
-        {/* Sidebar */}
-        <aside className="lg:w-72 lg:flex-shrink-0 space-y-7 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto thin-scroll pr-2">
+      <Legend />
+
+      {/* Mobile-only sticky filter bar — shows a Filters button + the active
+          filter count + a quick "clear" affordance. Hidden on lg+. */}
+      <div className="lg:hidden sticky top-0 z-30 bg-white/90 dark:bg-zinc-950/90 backdrop-blur border-b border-zinc-200 dark:border-zinc-800 px-4 py-2.5 flex items-center gap-2">
+        <button
+          onClick={() => setFiltersOpen(true)}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 hover:border-[var(--cardinal)] transition"
+        >
+          <FilterIcon className="w-4 h-4" />
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="bg-[var(--cardinal)] text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
+        {activeFilterCount > 0 && (
+          <button
+            onClick={clearAll}
+            className="text-xs text-[var(--cardinal)] font-medium"
+          >
+            Clear
+          </button>
+        )}
+        <div className="ml-auto text-xs text-zinc-500 tabular-nums">
+          {sorted.length.toLocaleString()} {sorted.length === 1 ? "course" : "courses"}
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col lg:flex-row max-w-[1600px] w-full mx-auto px-4 lg:px-8 gap-8 py-6 lg:py-8">
+        {/* Sidebar — inline on desktop, full-screen drawer on mobile when
+            filtersOpen is true. The classes flip the entire layout. */}
+        {filtersOpen && (
+          <div
+            onClick={() => setFiltersOpen(false)}
+            className="lg:hidden fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+          />
+        )}
+        <aside
+          className={
+            filtersOpen
+              ? "lg:!relative lg:!w-72 fixed inset-x-0 bottom-0 top-12 z-50 bg-white dark:bg-zinc-950 rounded-t-2xl shadow-2xl overflow-y-auto thin-scroll px-5 py-5 space-y-7 lg:rounded-none lg:shadow-none lg:px-0 lg:py-0 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:flex-shrink-0"
+              : "hidden lg:block lg:w-72 lg:flex-shrink-0 space-y-7 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto thin-scroll pr-2"
+          }
+        >
+          {/* Drawer header — mobile only */}
+          {filtersOpen && (
+            <div className="lg:hidden flex items-center justify-between pb-3 mb-3 border-b border-zinc-200 dark:border-zinc-800 sticky -top-5 -mx-5 px-5 pt-5 bg-white dark:bg-zinc-950 z-10">
+              <h2 className="text-base font-semibold">Filters</h2>
+              <div className="flex items-center gap-3">
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={clearAll}
+                    className="text-xs text-[var(--cardinal)] font-medium"
+                  >
+                    Clear all
+                  </button>
+                )}
+                <button
+                  onClick={() => setFiltersOpen(false)}
+                  aria-label="Close filters"
+                  className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-500 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          )}
           <FilterSection title="Show">
             <RadioGroup
               options={[
@@ -345,6 +425,18 @@ export default function Home() {
                 ))}
             </div>
           </FilterSection>
+
+          {/* Drawer footer — mobile only — primary CTA to dismiss */}
+          {filtersOpen && (
+            <div className="lg:hidden sticky bottom-0 -mx-5 px-5 py-3 mt-4 bg-white dark:bg-zinc-950 border-t border-zinc-200 dark:border-zinc-800">
+              <button
+                onClick={() => setFiltersOpen(false)}
+                className="w-full py-3 bg-[var(--cardinal)] text-white text-sm font-semibold rounded-lg hover:opacity-90 transition"
+              >
+                Show {sorted.length.toLocaleString()} {sorted.length === 1 ? "course" : "courses"}
+              </button>
+            </div>
+          )}
         </aside>
 
         {/* Main */}
@@ -440,19 +532,22 @@ function Hero({
 }) {
   return (
     <header className="hero-bg border-b border-zinc-200 dark:border-zinc-800">
-      <div className="max-w-[1600px] mx-auto px-4 lg:px-8 py-10 lg:py-14">
-        <div className="flex items-center gap-2 mb-4">
-          <div className="w-1.5 h-6 bg-[var(--cardinal)] rounded-full" />
-          <span className="text-xs uppercase tracking-[0.18em] font-semibold text-[var(--cardinal)]">
+      <div className="max-w-[1600px] mx-auto px-4 lg:px-8 py-8 lg:py-14">
+        <div className="flex items-center gap-2 mb-3 lg:mb-4">
+          <div className="w-1.5 h-5 lg:h-6 bg-[var(--cardinal)] rounded-full" />
+          <span className="text-[10px] lg:text-xs uppercase tracking-[0.15em] lg:tracking-[0.18em] font-semibold text-[var(--cardinal)]">
             Stanford · Public Interest Technology
           </span>
         </div>
-        <h1 className="text-3xl lg:text-5xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.05]">
-          Find the class that matches
-          <br />
-          the world you want to build.
+        <h1 className="text-[28px] sm:text-3xl lg:text-5xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-[1.1] lg:leading-[1.05]">
+          Find the class that matches{" "}
+          <span className="lg:hidden">the world you want to build.</span>
+          <span className="hidden lg:inline">
+            <br />
+            the world you want to build.
+          </span>
         </h1>
-        <p className="text-base lg:text-lg text-zinc-600 dark:text-zinc-400 mt-4 max-w-2xl leading-relaxed">
+        <p className="text-sm lg:text-lg text-zinc-600 dark:text-zinc-400 mt-3 lg:mt-4 max-w-2xl leading-relaxed">
           Every Stanford course offered in 2025–26, classified against the{" "}
           <a
             className="text-[var(--cardinal)] underline decoration-[var(--cardinal)]/40 underline-offset-2 hover:decoration-[var(--cardinal)] transition"
@@ -466,7 +561,7 @@ function Hero({
           and more.
         </p>
 
-        <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4 lg:gap-6">
+        <div className="mt-6 lg:mt-8 grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-6">
           <Stat value={pitOffered.toLocaleString()} label="PIT courses this year" />
           <Stat value={pitTotal.toLocaleString()} label="PIT in full catalog" subtle />
           <Stat value={impactAreaCount.toString()} label="Impact areas" subtle />
@@ -477,17 +572,51 @@ function Hero({
   );
 }
 
+function Legend() {
+  // Order of themes in the legend — matches the natural reading order users
+  // encounter in the impact-areas filter.
+  const themes: ImpactTheme[] = [
+    "justice",
+    "ethics",
+    "environment",
+    "civic",
+    "health",
+    "education",
+    "government",
+  ];
+  return (
+    <div className="border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-950/60">
+      <div className="max-w-[1600px] mx-auto px-4 lg:px-8 py-3 flex items-center gap-3 overflow-x-auto thin-scroll">
+        <span className="text-[10px] uppercase tracking-[0.15em] font-semibold text-zinc-500 whitespace-nowrap flex-shrink-0">
+          Stripe = theme
+        </span>
+        <div className="flex items-center gap-3 lg:gap-4">
+          {themes.map((t) => {
+            const s = THEME_STYLES[t];
+            return (
+              <div key={t} className="flex items-center gap-1.5 whitespace-nowrap">
+                <span className={`w-3 h-3 rounded-sm ${s.dot}`} />
+                <span className="text-xs text-zinc-600 dark:text-zinc-400">{s.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Stat({ value, label, subtle }: { value: string; label: string; subtle?: boolean }) {
   return (
     <div className="flex flex-col">
       <div
-        className={`text-3xl lg:text-4xl font-semibold tracking-tight tabular-nums ${
+        className={`text-2xl sm:text-3xl lg:text-4xl font-semibold tracking-tight tabular-nums ${
           subtle ? "text-zinc-700 dark:text-zinc-300" : "text-[var(--cardinal)]"
         }`}
       >
         {value}
       </div>
-      <div className="text-xs lg:text-sm text-zinc-500 mt-1 leading-tight">{label}</div>
+      <div className="text-[11px] sm:text-xs lg:text-sm text-zinc-500 mt-1 leading-tight">{label}</div>
     </div>
   );
 }
@@ -603,12 +732,13 @@ function CourseCard({
     >
       <div className="flex">
         <div className={`w-1 flex-shrink-0 ${stripe}`} />
-        <div className="flex-1 p-5 min-w-0">
-          <div className="flex items-baseline justify-between gap-3 mb-1">
+        <div className="flex-1 p-4 sm:p-5 min-w-0">
+          {/* Stacked on mobile, justified row on sm+ */}
+          <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-y-0.5 sm:gap-x-3 mb-1.5">
             <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400 tracking-wide">
               {course.full_code}
             </span>
-            <div className="text-xs whitespace-nowrap flex items-center gap-3 text-zinc-500">
+            <div className="text-xs flex items-center flex-wrap gap-x-2 gap-y-0.5 text-zinc-500">
               {course.is_offered_this_year ? (
                 <span className="text-emerald-700 dark:text-emerald-400 font-medium">
                   {course.offered_terms.join(" · ")}
@@ -901,6 +1031,14 @@ function EmptyState({ onReset }: { onReset: () => void }) {
 // =====================================================================
 // Inline icons (keeps the bundle small — no icon library dep)
 // =====================================================================
+
+function FilterIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M4 6h16M7 12h10M10 18h4" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 function SearchIcon({ className }: { className?: string }) {
   return (
