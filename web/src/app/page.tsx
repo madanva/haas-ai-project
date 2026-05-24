@@ -23,7 +23,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
 
   const [search, setSearch] = useState("");
-  const [selectedAreas, setSelectedAreas] = useState<Set<string>>(new Set());
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(new Set());
   const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
   const [selectedDepts, setSelectedDepts] = useState<Set<string>>(new Set());
   const [selectedQuarters, setSelectedQuarters] = useState<Set<string>>(new Set());
@@ -102,8 +102,10 @@ export default function Home() {
         if (!hit) return false;
       }
       if (visibility === "pit_only" && !r.verdict.is_pit) return false;
-      if (selectedAreas.size > 0) {
-        const hit = r.verdict.impact_areas.some((a) => selectedAreas.has(a));
+      if (selectedThemes.size > 0) {
+        const hit = r.verdict.impact_areas.some((a) =>
+          selectedThemes.has(impactAreaTheme(a)),
+        );
         if (!hit) return false;
       }
       if (selectedCategories.size > 0) {
@@ -130,7 +132,7 @@ export default function Home() {
   }, [
     payload,
     search,
-    selectedAreas,
+    selectedThemes,
     selectedCategories,
     selectedDepts,
     selectedQuarters,
@@ -170,7 +172,7 @@ export default function Home() {
 
   const clearAll = () => {
     setSearch("");
-    setSelectedAreas(new Set());
+    setSelectedThemes(new Set());
     setSelectedCategories(new Set());
     setSelectedDepts(new Set());
     setSelectedQuarters(new Set());
@@ -179,7 +181,7 @@ export default function Home() {
 
   const activeFilterCount =
     (search ? 1 : 0) +
-    (selectedAreas.size > 0 ? 1 : 0) +
+    (selectedThemes.size > 0 ? 1 : 0) +
     (selectedCategories.size > 0 ? 1 : 0) +
     (selectedDepts.size > 0 ? 1 : 0) +
     (selectedQuarters.size > 0 ? 1 : 0);
@@ -354,29 +356,52 @@ export default function Home() {
 
           <FilterSection
             title="Impact area"
-            count={selectedAreas.size}
-            onClear={selectedAreas.size > 0 ? () => setSelectedAreas(new Set()) : undefined}
+            count={selectedThemes.size}
+            onClear={selectedThemes.size > 0 ? () => setSelectedThemes(new Set()) : undefined}
           >
-            <ThemeKey />
-            <div className="space-y-1.5 mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-800">
-              {IMPACT_AREAS.map((a) => {
-                const theme = impactAreaTheme(a.name);
-                const dot = THEME_STYLES[theme].dot;
+            <div className="space-y-1">
+              {(
+                [
+                  "justice",
+                  "ethics",
+                  "environment",
+                  "civic",
+                  "health",
+                  "education",
+                  "government",
+                ] as ImpactTheme[]
+              ).map((t) => {
+                const s = THEME_STYLES[t];
+                const inSet = selectedThemes.has(t);
+                const total = offeredFilteredAll.filter((r) =>
+                  r.verdict.impact_areas.some((a) => impactAreaTheme(a) === t),
+                ).length;
+                const pitN = offeredFilteredAll.filter(
+                  (r) =>
+                    r.verdict.is_pit &&
+                    r.verdict.impact_areas.some((a) => impactAreaTheme(a) === t),
+                ).length;
+                const n = visibility === "pit_only" ? pitN : total;
                 return (
-                  <label
-                    key={a.name}
-                    title={a.description}
-                    className="flex items-center gap-2 text-sm cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900 -mx-1 px-1 py-1 rounded"
+                  <button
+                    key={t}
+                    onClick={() => toggleSet(selectedThemes, t, setSelectedThemes)}
+                    className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm text-left transition ${
+                      inSet
+                        ? "bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900"
+                        : "hover:bg-zinc-100 dark:hover:bg-zinc-900"
+                    }`}
                   >
-                    <input
-                      type="checkbox"
-                      className="flex-shrink-0"
-                      checked={selectedAreas.has(a.name)}
-                      onChange={() => toggleSet(selectedAreas, a.name, setSelectedAreas)}
-                    />
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${dot}`} />
-                    <span className="leading-tight flex-1 truncate">{a.name}</span>
-                  </label>
+                    <span className={`w-2.5 h-2.5 rounded-sm flex-shrink-0 ${s.dot}`} />
+                    <span className="flex-1 truncate">{s.label}</span>
+                    <span
+                      className={`text-xs tabular-nums ${
+                        inSet ? "text-white/70 dark:text-zinc-700" : "text-zinc-500"
+                      }`}
+                    >
+                      {n.toLocaleString()}
+                    </span>
+                  </button>
                 );
               })}
             </div>
@@ -568,36 +593,6 @@ function Hero({
         </div>
       </div>
     </header>
-  );
-}
-
-function ThemeKey() {
-  // Compact sidebar key: maps the seven stripe colors to their theme labels.
-  // Sits right above the Impact area filter where the same dots appear.
-  const themes: ImpactTheme[] = [
-    "justice",
-    "ethics",
-    "environment",
-    "civic",
-    "health",
-    "education",
-    "government",
-  ];
-  return (
-    <div className="text-[11px] text-zinc-500 leading-tight space-y-1 mt-2 pl-0.5">
-      <div className="text-[10px] uppercase tracking-[0.12em] text-zinc-400 mb-1.5">
-        Stripe / dot key
-      </div>
-      {themes.map((t) => {
-        const s = THEME_STYLES[t];
-        return (
-          <div key={t} className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-sm flex-shrink-0 ${s.dot}`} />
-            <span>{s.label}</span>
-          </div>
-        );
-      })}
-    </div>
   );
 }
 
