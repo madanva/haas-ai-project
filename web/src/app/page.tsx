@@ -519,6 +519,7 @@ export default function Home() {
                 course={r}
                 onClick={() => setActiveCourse(r)}
                 delayIndex={i}
+                highlightThemes={selectedThemes}
               />
             ))}
             {sorted.length > 500 && (
@@ -705,75 +706,114 @@ function CourseCard({
   course,
   onClick,
   delayIndex,
+  highlightThemes,
 }: {
   course: ClassifiedCourse;
   onClick: () => void;
   delayIndex: number;
+  highlightThemes: Set<string>;
 }) {
   const v = course.verdict;
-  const theme = primaryTheme(v.impact_areas);
-  const stripe = theme ? THEME_STYLES[theme].stripe : "bg-zinc-300";
+  // Compute the unique set of themes this course covers (preserve order).
+  const themes: ImpactTheme[] = [];
+  const seen = new Set<ImpactTheme>();
+  for (const a of v.impact_areas) {
+    const t = impactAreaTheme(a);
+    if (!seen.has(t)) {
+      seen.add(t);
+      themes.push(t);
+    }
+  }
 
   return (
     <button
       onClick={onClick}
       style={{ animationDelay: `${Math.min(delayIndex, 12) * 18}ms` }}
-      className="fade-up group text-left w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md hover:shadow-zinc-900/[0.04] transition-all duration-150"
+      className="fade-up group text-left w-full bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md hover:shadow-zinc-900/[0.04] transition-all duration-150 p-4 sm:p-5 min-w-0"
     >
-      <div className="flex">
-        <div className={`w-1 flex-shrink-0 ${stripe}`} />
-        <div className="flex-1 p-4 sm:p-5 min-w-0">
-          {/* Stacked on mobile, justified row on sm+ */}
-          <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-y-0.5 sm:gap-x-3 mb-1.5">
-            <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400 tracking-wide">
-              {course.full_code}
+      {/* Stacked on mobile, justified row on sm+ */}
+      <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-y-0.5 sm:gap-x-3 mb-1.5">
+        <span className="text-xs font-mono text-zinc-500 dark:text-zinc-400 tracking-wide">
+          {course.full_code}
+        </span>
+        <div className="text-xs flex items-center flex-wrap gap-x-2 gap-y-0.5 text-zinc-500">
+          {course.is_offered_this_year ? (
+            <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+              {course.offered_terms.join(" · ")}
             </span>
-            <div className="text-xs flex items-center flex-wrap gap-x-2 gap-y-0.5 text-zinc-500">
-              {course.is_offered_this_year ? (
-                <span className="text-emerald-700 dark:text-emerald-400 font-medium">
-                  {course.offered_terms.join(" · ")}
-                </span>
-              ) : (
-                <span className="text-amber-700 dark:text-amber-400 font-medium">
-                  Not offered 2025–26
-                </span>
-              )}
-              <span className="text-zinc-400 dark:text-zinc-600">·</span>
-              <span>
-                {course.units_min === course.units_max
-                  ? `${course.units_min ?? "?"} units`
-                  : `${course.units_min ?? "?"}–${course.units_max ?? "?"} units`}
-              </span>
-            </div>
-          </div>
-          <h2 className="text-base lg:text-lg font-medium text-zinc-900 dark:text-zinc-50 leading-snug mb-2.5 group-hover:text-[var(--cardinal)] transition-colors">
-            {course.title}
-          </h2>
-          <div className="flex flex-wrap gap-1.5 mb-2.5">
-            {v.is_pit && v.pit_category && (
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 uppercase tracking-wide">
-                {PIT_CATEGORY_LABELS[v.pit_category]?.label || v.pit_category}
-              </span>
-            )}
-            {v.impact_areas.map((a) => (
-              <span
-                key={a}
-                className={`text-xs px-2 py-0.5 rounded-full border ${areaChipClass(a)}`}
-              >
-                {a}
-              </span>
-            ))}
-            {!v.is_pit && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-500">
-                not PIT · conf {v.confidence.toFixed(2)}
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed line-clamp-2">
-            {course.description}
-          </p>
+          ) : (
+            <span className="text-amber-700 dark:text-amber-400 font-medium">
+              Not offered 2025–26
+            </span>
+          )}
+          <span className="text-zinc-400 dark:text-zinc-600">·</span>
+          <span>
+            {course.units_min === course.units_max
+              ? `${course.units_min ?? "?"} units`
+              : `${course.units_min ?? "?"}–${course.units_max ?? "?"} units`}
+          </span>
         </div>
       </div>
+
+      <h2 className="text-base lg:text-lg font-medium text-zinc-900 dark:text-zinc-50 leading-snug mb-2.5 group-hover:text-[var(--cardinal)] transition-colors">
+        {course.title}
+      </h2>
+
+      {/* Explicit theme row — labelled, so users always know what the colors
+          mean. When a theme is filter-selected, its chip gets a solid fill
+          treatment to reinforce "this is why the course matched". */}
+      {v.is_pit && themes.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
+          {themes.map((t) => {
+            const s = THEME_STYLES[t];
+            const active = highlightThemes.has(t);
+            return (
+              <span
+                key={t}
+                className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border transition ${
+                  active
+                    ? `${s.chip} ${s.chipDark} ring-2 ring-offset-1 ring-offset-white dark:ring-offset-zinc-950 ring-zinc-900 dark:ring-zinc-100`
+                    : `${s.chip} ${s.chipDark}`
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+                {s.label}
+              </span>
+            );
+          })}
+          {v.pit_category && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 uppercase tracking-wide">
+              {PIT_CATEGORY_LABELS[v.pit_category]?.label || v.pit_category}
+            </span>
+          )}
+        </div>
+      )}
+
+      {!v.is_pit && (
+        <div className="mb-2.5">
+          <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-900 text-zinc-500">
+            not PIT · conf {v.confidence.toFixed(2)}
+          </span>
+        </div>
+      )}
+
+      {/* Granular impact areas — small chips, lower visual weight */}
+      {v.impact_areas.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-2.5">
+          {v.impact_areas.map((a) => (
+            <span
+              key={a}
+              className="text-[11px] px-1.5 py-0.5 rounded text-zinc-600 dark:text-zinc-400 bg-zinc-100/60 dark:bg-zinc-900/60"
+            >
+              {a}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed line-clamp-2">
+        {course.description}
+      </p>
     </button>
   );
 }
@@ -786,8 +826,6 @@ function CourseModal({
   onClose: () => void;
 }) {
   const v = course.verdict;
-  const theme = primaryTheme(v.impact_areas);
-  const stripe = theme ? THEME_STYLES[theme].stripe : "bg-zinc-300";
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -811,9 +849,8 @@ function CourseModal({
         onClick={(e) => e.stopPropagation()}
         className="fade-up bg-white dark:bg-zinc-950 rounded-t-3xl sm:rounded-2xl shadow-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto thin-scroll"
       >
-        <div className="flex">
-          <div className={`w-1.5 flex-shrink-0 ${stripe}`} />
-          <div className="flex-1 p-6 lg:p-9">
+        <div>
+          <div className="p-6 lg:p-9">
             <div className="flex items-start justify-between gap-3 mb-5">
               <div className="min-w-0">
                 <div className="text-xs font-mono text-zinc-500 tracking-wide mb-1">
