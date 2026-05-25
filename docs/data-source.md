@@ -16,6 +16,7 @@ Stanford's official catalog API. We iterate every department code on the explore
 - Learning objectives
 - Grading basis
 - Academic organization
+- Offered terms (`offered_terms: list[str]`, subset of `Autumn`/`Winter`/`Spring`/`Summer`) and a derived `is_offered_this_year: bool` — distinguishes catalog-active courses from those actually scheduled to be taught this year. ExploreCourses' UI shows "Last offered: ..." for catalog-active courses that aren't on the current year's schedule; we expose both states so the UI can filter on either.
 
 ## Deprecation status
 

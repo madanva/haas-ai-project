@@ -62,10 +62,12 @@ The two-pass setup in [`classifier/classify.py`](../classifier/classify.py) is a
 ## 4. Open Questions & Active Work Items
 
 > **This section is transient.** Items are expected to migrate to GitHub Issues as they're picked up. The list should shrink over time.
+>
+> **Snapshot pin: `ba40928`.** Observations below are verified against this commit. If you're reading this doc on a later commit, re-verify before acting — see [Audit history](#audit-history) at the bottom.
 
 ### 4.1 Scope: are fellowships and projects still in?
 
-The Apr 27 kickoff framed the system as covering **classes + fellowships + research projects**. The repo today is classes only. Open question for the team: are fellowships and projects deferred to a later milestone, or has scope narrowed? Materially affects what work is on the table.
+The Apr 27 kickoff framed the system as covering **classes + fellowships + research projects**. The repo today is classes only (`web/src/app/types.ts` only models `Course`; no `Fellowship` or `Project` types). Open question for the team: are fellowships and projects deferred to a later milestone, or has scope narrowed? Materially affects what work is on the table.
 
 ### 4.2 Two classifier prompts that disagree
 
@@ -82,9 +84,25 @@ There's no labeled ground-truth dataset and no F1 / precision / recall measureme
 
 `classifier/classify.py` uses synchronous `client.messages.create` across a thread pool. Neither **prompt caching** nor the **Batch API** is enabled. The system prompt is large (full taxonomy + 6 few-shot examples) and identical across every call, so prompt caching alone would cut pass-2 cost by an estimated 70%; Batch API would halve it again. Concretely: ~$20–30 → ~$3–5 per full reclassify. ~50 lines of change.
 
-### 4.5 Taxonomy duplicated across Python and TypeScript
+### 4.5 Taxonomy duplication has grown asymmetric
 
-[`classifier/taxonomy.py`](../classifier/taxonomy.py) is the Python source of truth. [`web/src/app/taxonomy.ts`](../web/src/app/taxonomy.ts) is a hand-maintained TS mirror used by UI filters. README calls out the need to keep them in sync. Bug-prone — small wins available with codegen from the Python source to a shared JSON consumed by both runtimes.
+[`classifier/taxonomy.py`](../classifier/taxonomy.py) is the Python source of truth: 19 impact areas + 4 PIT categories + knowledge pillars + exclusion patterns. [`web/src/app/taxonomy.ts`](../web/src/app/taxonomy.ts) mirrors the 19-area list and 4 PIT categories — but **as of the `19 → 7 themes` UI restructure, it has also grown TS-only structure that has no Python equivalent**:
+
+- `ImpactTheme` type with 7 themes (`justice`, `health`, `environment`, `civic`, `ethics`, `education`, `government`)
+- `IMPACT_AREA_THEME: Record<string, ImpactTheme>` mapping each of the 19 areas to one of the 7 themes
+- `THEME_STYLES` with Tailwind classes per theme
+- Helper functions (`impactAreaTheme`, `areaChipClass`, `primaryTheme`)
+
+README still instructs contributors to "keep these in sync" but the 7-theme grouping isn't synced from anywhere — it lives only in TS. If the classifier ever needs to know about themes (for instance, to use the 7 themes as classification categories instead of the 19 areas), it would have to either reach into TS code or duplicate the mapping. Codegen from a single JSON source consumed by both runtimes is the natural fix; this is more important now than it was before the restructure.
+
+### 4.6 Documentation drift after the 19 → 7 themes restructure
+
+The UI changes that landed in `b9651a0` / `9305623` (themes as filter, 19-area chips for display only) are correct, but the surrounding docs haven't been updated to match:
+
+- **README.md** still describes the 19 PIT impact areas as the primary classification *and filter* mechanism. The reality is now: 19 areas remain the classification schema; 7 themes are the filter UI. Worth a short paragraph clarifying the two levels.
+- **`docs/data-source.md`** lists "What we pull per course" but omits the new `offered_terms` (`list[str]`) and `is_offered_this_year` (`bool`) fields the scraper now emits. Filterable signal in the UI; should be in the doc.
+
+Either fixable in a quick PR; flagging here in case anyone wants to grab them before they grow.
 
 ---
 
@@ -98,10 +116,19 @@ b. **Prompt caching + Batch API for `classify.py`** — well-scoped, ~50 lines, 
 
 c. **Reconcile `classifier/classify.py` and `VS/pit_classifier_prompt.xml`** — coordination work, requires team decision on which is canonical.
 
-d. **Codegen `taxonomy.ts` from `taxonomy.py`** — small, defensive, removes a bug class.
+d. **Codegen taxonomy across Python and TS** — small, defensive, removes a bug class. *More important after the 19 → 7 themes restructure* (see §4.5) since the asymmetry can't be hand-synced.
 
 ---
 
 ## Appendix: Investigation log
 
 The full scoping investigation (Navigator probes, OnCourse bundle analysis, ExploreCourses XML verification) is recorded in a private Obsidian vault. Reproducible commands are inlined above wherever the resulting claim is verifiable — `curl https://explorecourses.stanford.edu/robots.txt` for the cache-bleed footnote, the OnCourse bundle introspection for the architectural reference. Happy to share the raw notes if useful.
+
+---
+
+## Audit history
+
+Each entry pins the §4/§5 observations to a specific commit so future readers can see when content was last verified against the code.
+
+- **2026-05-23 (`ed21c25`)** — Initial draft of this doc. Audit content verified against commit `ed21c25` (HEAD at the time the PR opened). Landed on main as `ba40928` via [PR #1](https://github.com/madanva/haas-ai-project/pull/1).
+- **2026-05-24 (`ba40928`)** — Re-audit after the `19 → 7 themes` UI restructure (`9305623`, `b9651a0`) and related work landed on main during PR #1's review window. §4.5 expanded (taxonomy asymmetry grew); §4.6 added (documentation drift). §§4.1–4.4 unchanged.
